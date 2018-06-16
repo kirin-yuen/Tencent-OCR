@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>腾讯云 OCR 图像识别</title>
+    <style>
+    img {
+        max-width: 100%;
+    }
+    </style>
+    <link rel="stylesheet" href="assets/vendors/layui/css/layui.css" />
+</head>
+
+<body class="layui-bg-gray">
+    <from class="layui-form">
+        <div class="layui-container" style="margin-top: 40px">
+            <div class="layui-row layui-col-space10">
+                <div class="layui-col-md6">
+                    <div class="layui-row layui-col-space5">
+                        <div class="layui-col-md12">
+                            <input name="ocr-link" id="ocr-link" name class="layui-input" type="text" placeholder="输入图片链接进行识别" lay-verify="required|url" list="defaultURLs">
+                            <datalist id="defaultURLs">
+                                <option value="https://timgsa.baidu.com/timg?image&quality=80&size=b9999_10000&sec=1529149312889&di=707fb9970330ee7885f3cfa99685b6ad&imgtype=0&src=http%3A%2F%2Fs9.cdn.deahu.com%2Fjingyan%2Fimage_cluster%2F2015-03-07%2F18%2F5563573_57E08CDB00B77380A060F8A6F6C69659.jpg" label="测试图片1">
+                                    <option value="https://timgsa.baidu.com/timg?image&quality=80&size=b9999_10000&sec=1529142268803&di=293a85720833262351b10fb999e0ec50&imgtype=0&src=http%3A%2F%2Fp3.gexing.com%2FG1%2FM00%2FDC%2F63%2FrBACE1XAnyCQTAVhAACzUGnEfn0754.jpg" label="测试图片2">
+                            </datalist>
+                        </div>
+                        <div class="layui-col-md12">
+                            <button class="layui-btn" lay-submit lay-filter="recognition-frontend">开始识别(前端生成签名)</button>
+                            <button class="layui-btn layui-btn-danger" lay-submit lay-filter="recognition-nodejs">开始识别(后端生成签名)</button>
+                        </div>
+                        <div class="layui-col-md12">
+                            <div class="layui-card layui-hide" id="ocr-result">
+                                <div class="layui-card-header">识别结果</div>
+                                <div class="layui-card-body">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="layui-col-md6">
+                    <img id="ocr-img" alt="无法解析图片地址" />
+                </div>
+            </div>
+        </div>
+    </from>
+    <script src="https://cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
+    <script src="https://cdn.bootcss.com/crypto-js/3.1.9/crypto-js.min.js"></script>
+    <script src="assets/vendors/layui/layui.js"></script>
+    <script>
+    // 前端生成加密字符串
+    var appid = '1256911885',
+        secretId = 'AKIDUtCLJ7QgfgeUAepKSPBlHftu15yhld7S',
+        secretKey = 'JSQDuY6UhmhS3lJgv0BD5mHblkeOyOdi',
+        time = new Date().getTime() / 1000,
+        expired = time + 60 * 60,
+        random = parseInt(Math.random() * 10000),
+        originalStr = `a=${appid}&b=&k=${secretId}&e=${expired}&t=${time}&r=${random}&u=0&f=`,
+        originalStrWordArray = CryptoJS.enc.Utf8.parse(originalStr),
+        signWordArray = CryptoJS.HmacSHA1(originalStr, secretKey),
+        concatWordArray = signWordArray.concat(originalStrWordArray),
+        authorization = CryptoJS.enc.Base64.stringify(concatWordArray);
+
+    layui.use('form', function(data) {
+        var form = layui.form;
+
+        form.on('submit(recognition-frontend)', function(data) {
+            layui.use('layer', function() {
+                var layer = layui.layer;
+                layer.load(2, {
+                    offset: 'auto',
+                    shade: [0.5, '#fff'] //0.1透明度的白色背景
+                });
+
+                getOcrResult(authorization);
+            });
+
+            return false;
+        });
+
+        form.on('submit(recognition-nodejs)', function(data) {
+            layui.use('layer', function() {
+                var layer = layui.layer;
+                layer.load(2, {
+                    offset: 'auto',
+                    shade: [0.5, '#fff'] //0.1透明度的白色背景
+                });
+
+                $.ajax({
+                    method: 'post',
+                    url: 'http://localhost:3000/api',
+                    success: function(data) {
+                        getOcrResult(data.sign);
+                    }
+                });
+            });
+
+            return false;
+        });
+    });
+
+    $('#ocr-link').on('input', function() {
+        $('#ocr-img').attr('src', $('#ocr-link').val());
+    });
+
+    function getOcrResult(authorization) {
+        $.ajax({
+            url: 'http://recognition.image.myqcloud.com/ocr/general',
+            headers: {
+                authorization: authorization,
+                'content-type': 'application/json'
+            },
+            method: 'post',
+            data: JSON.stringify({
+                appid: appid,
+                url: $('#ocr-link').val()
+            }),
+            success: (function(data) {
+                layer.closeAll('loading');
+                $('#ocr-result').removeClass('layui-hide');
+
+                var content = '';
+
+                if (data.code !== 0) {
+                    content = '识别失败，错误消息 ：' + data.message;
+                } else {
+                    data.data.items.forEach(function(item) {
+                        content += '<p>' + item.itemstring + '</p>';
+                    });
+                }
+
+                $('#ocr-result .layui-card-body').html(content);
+            })
+        });
+    }
+    </script>
+</body>
+
+</html>
